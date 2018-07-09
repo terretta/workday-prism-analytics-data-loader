@@ -1,5 +1,7 @@
 ## build output
 target/
+*.releaseBackup
+release.properties
 
 ## eclipse files
 .project
