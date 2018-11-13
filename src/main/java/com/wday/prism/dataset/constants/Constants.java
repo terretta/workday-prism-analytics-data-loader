@@ -37,13 +37,15 @@ public class Constants {
 
 	public static final int MAX_CONCURRENT_LOADS = 2;
 
-	public static final int MAX_NUM_FILE_PARTS_IN_A_BUCKET = 10;
+	public static final int MAX_NUM_FILE_PARTS_IN_A_BUCKET = 100;
 
 	public static final long COMPRESSED_FILE_PART_LENGTH = 128 * FileUtils.ONE_MB; // 128MB
 
 	public static final long MAX_COMPRESSED_FILE_PART_LENGTH = 256 * FileUtils.ONE_MB; // 256MB
 
 	public static final long MAX_UNCOMPRESSED_FILE_LENGTH = 24 * FileUtils.ONE_GB; // 24GB
+
+	public static final long MAX_COMPRESSED_FILE_LENGTH = 8 * FileUtils.ONE_GB; // 24GB
 
 	public static CodingErrorAction codingErrorAction = CodingErrorAction.REPORT;
 

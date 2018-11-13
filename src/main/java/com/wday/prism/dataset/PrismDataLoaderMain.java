@@ -118,10 +118,11 @@ public class PrismDataLoaderMain {
 				} else if (args[i - 1].equalsIgnoreCase("--operation")) {
 					if (args[i] != null) {
 						if (args[i].equalsIgnoreCase("replace")) {
-							params.operation = args[i];
+							params.operation = args[i].toLowerCase();
+						} else if (args[i].equalsIgnoreCase("append")) {
+							params.operation = args[i].toLowerCase();
 							/*
 							 * } else if (args[i].equalsIgnoreCase("upsert")) { params.operation = args[i];
-							 * } else if (args[i].equalsIgnoreCase("append")) { params.operation = args[i];
 							 * } else if (args[i].equalsIgnoreCase("delete")) { params.operation = args[i];
 							 */
 						} else {
@@ -420,7 +421,7 @@ public class PrismDataLoaderMain {
 				try {
 					boolean status = com.wday.prism.dataset.file.loader.DatasetLoader.uploadDataset(
 							params.endpoint.tenantURL, params.endpoint.apiVersion, params.endpoint.tenant,
-							params.accessToken, params.inputFile, params.schemaFile, "CSV", params.codingErrorAction,
+							params.accessToken, new File(params.inputFile), params.schemaFile, "CSV", params.codingErrorAction,
 							params.fileEncoding, params.dataset, params.datasetLabel, params.operation, System.out,
 							true);
 					if (status)
@@ -429,6 +430,7 @@ public class PrismDataLoaderMain {
 						session.fail("Check sessionLog for details");
 					return status;
 				} catch (DatasetLoaderException e) {
+					e.printStackTrace(System.out);
 					session.fail(e.getMessage());
 					return false;
 				}
@@ -504,6 +506,7 @@ public class PrismDataLoaderMain {
 					params.endpoint.tenant, params.username, params.password, params.token, System.out);
 		} catch (Throwable e) {
 			e.printStackTrace();
+			System.out.println("\nERROR: Invalid crednetials for workday tenant");
 			System.exit(-1);
 		}
 
@@ -616,29 +619,32 @@ public class PrismDataLoaderMain {
 				return temp;
 			}
 
-			String ext = FilenameUtils.getExtension(temp.getName());
-			if (ext == null || !(ext.equalsIgnoreCase("csv"))) {
-				System.out.println("\nERROR: inputFile does not have valid extension, only csv files are supported");
-				return null;
-			}
+			if(!temp.isDirectory())
+			{
+				String ext = FilenameUtils.getExtension(temp.getName());
+				if (ext == null || !(ext.equalsIgnoreCase("csv") || (ext.equalsIgnoreCase("gz")))) {
+					System.out.println("\nERROR: inputFile does not have valid extension, only csv files are supported");
+					return null;
+				}
 
-			if (action.equalsIgnoreCase("load")) {
-				if (ext.equalsIgnoreCase("gz")) {
-					try {
-						if (!FileUtilsExt.isGzipFile(temp)) {
-							System.out.println("\nERROR: inputFile is not valid gzip file");
+				if (action.equalsIgnoreCase("load")) {
+					if (ext.equalsIgnoreCase("gz")) {
+						try {
+							if (!FileUtilsExt.isGzipFile(temp)) {
+								System.out.println("\nERROR: inputFile is not valid gzip file");
+								return null;
+							}
+						} catch (FileNotFoundException e) {
+							e.printStackTrace();
+							System.out.println("\nERROR: inputFile {" + temp + "} not found");
+							return null;
+						} catch (IOException e) {
+							e.printStackTrace();
+							System.out.println("\nERROR: inputFile {" + temp + "} in not valid");
 							return null;
 						}
-					} catch (FileNotFoundException e) {
-						e.printStackTrace();
-						System.out.println("\nERROR: inputFile {" + temp + "} not found");
-						return null;
-					} catch (IOException e) {
-						e.printStackTrace();
-						System.out.println("\nERROR: inputFile {" + temp + "} in not valid");
-						return null;
+	
 					}
-
 				}
 			}
 

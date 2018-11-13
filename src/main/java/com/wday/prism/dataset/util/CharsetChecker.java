@@ -35,9 +35,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
 import java.nio.charset.Charset;
+import java.util.zip.GZIPInputStream;
 
 import com.ibm.icu.text.CharsetDetector;
 import com.ibm.icu.text.CharsetMatch;
+import com.wday.prism.dataset.constants.Constants;
 
 public class CharsetChecker {
 
@@ -45,8 +47,14 @@ public class CharsetChecker {
 		CharsetDetector detector = null;
 		InputStream input = null;
 		try {
+			if (FileUtilsExt.isGzipFile(inputFile)) {
+				input = new BufferedInputStream(new GZIPInputStream(new FileInputStream(inputFile),Constants.DEFAULT_BUFFER_SIZE),Constants.DEFAULT_BUFFER_SIZE);
+			} else {
+				input = new BufferedInputStream(new FileInputStream(inputFile),Constants.DEFAULT_BUFFER_SIZE);
+			}
+			
+			//input = new BufferedInputStream(new FileInputStream(inputFile));
 			detector = new CharsetDetector();
-			input = new BufferedInputStream(new FileInputStream(inputFile));
 			detector.setText(input);
 			CharsetMatch cm = detector.detect();
 			logger.println("\n*******************************************************************************");

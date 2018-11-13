@@ -45,7 +45,7 @@ Or you can pass in all the param in the command line:
 
 Input Parameter
 
-``--action``  : load, loadAll, createSchema, detectEncoding. Use load for loading csv, loadall for loading all files in a folder
+``--action``  : load, loadAll, createSchema, detectEncoding. Use load for loading csv file or folder to a dataset, loadall for loading all files in a folder to individual datasets
 
 ``--u``       : Workday Rest API Client Id
 
@@ -55,15 +55,18 @@ Input Parameter
 
 ``--endpoint``: The Workday Rest API Endpoint URL. Example: https://wd2-impl-services1.workday.com/ccx/api/v1/{tenantName}
 
-``--inputFile``: The input csv file (or directory if action is loadall)
+``--inputFile``: The input csv file or directory (or directory if action is loadall)
 
 ``--dataset`` : (Optional) the dataset name (required if action=load)
 
 ``--fileEncoding`` : (Optional) the encoding of the inputFile default UTF-8
 
-Example 1: Upload a csv to a dataset
+``--operation`` : (Optional) the dataset update mode 'append' or 'replace'. Default is 'replace'
 
-``java -jar workday-prism-analytics-data-loader-<version>.jar --action load --endpoint https://wd2-impl-services1.workday.com/ccx/api/v1/{tenantName} --u 12345#! --p @#@#@# --token A1B2C3A1B2C3A1B2C3A1B2C3 --inputFile workers.csv --dataset test``
+
+Example 1: Upload a csv to a dataset in append mode
+
+``java -jar workday-prism-analytics-data-loader-<version>.jar --action load --operation append --endpoint https://wd2-impl-services1.workday.com/ccx/api/v1/{tenantName} --u 12345#! --p @#@#@# --token A1B2C3A1B2C3A1B2C3A1B2C3 --inputFile workers.csv --dataset test``
 
 Example 2: Upload all files in a folder to Prism
 

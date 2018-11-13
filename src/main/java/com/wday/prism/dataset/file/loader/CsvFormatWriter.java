@@ -50,8 +50,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream;
-//import org.apache.commons.compress.compressors.gzip.GzipParameters;
-import org.apache.commons.io.FilenameUtils;
 
 import com.wday.prism.dataset.constants.Constants;
 import com.wday.prism.dataset.file.schema.FieldType;
@@ -73,7 +71,7 @@ public class CsvFormatWriter {
 	int interval = 10;
 
 	private final File outputDir;
-	private final String outPutFileName;
+	private final String uploadFilePrefix;
 	private File ouputFile = null;
 	private CSVWriter writer = null;
 
@@ -85,13 +83,15 @@ public class CsvFormatWriter {
 	long startTime = 0L;
 
 	private int filePart;
+	private int headerLinesToIgnore;
 
-	public CsvFormatWriter(File outputDir, String outputFileName, List<FieldType> dataTypes, PrintStream logger) {
+	public CsvFormatWriter(File outputDir, String uploadFilePrefix, List<FieldType> dataTypes, PrintStream logger,int headerLinesToIgnore) {
 		this.outputDir = outputDir;
-		this.outPutFileName = outputFileName;
+		this.uploadFilePrefix = uploadFilePrefix;
 		this._dataTypes = dataTypes;
 		this.numColumns = dataTypes.size();
 		this.logger = logger;
+		this.headerLinesToIgnore = headerLinesToIgnore;
 	}
 
 	public void addrow(List<String> values) throws ParseException, FileNotFoundException, IOException {
@@ -132,7 +132,7 @@ public class CsvFormatWriter {
 
 			if (fieldType.getType() == FieldTypeEnum.NUMERIC) {
 				try {
-					if (columnValue == null || columnValue.toString().trim().isEmpty()) {
+					if (columnValue == null || columnValue.toString().trim().isEmpty() || columnValue.toString().trim().equalsIgnoreCase("null") || columnValue.toString().trim().equalsIgnoreCase("n/a")) {
 						dim_values.add(null);
 					} else if (columnValue != null) {
 						BigDecimal v = null;
@@ -160,7 +160,7 @@ public class CsvFormatWriter {
 			} else if (fieldType.getType() == FieldTypeEnum.DATE) {
 				try {
 					SimpleDateFormat sdt = fieldType.getCompiledDateFormat();
-					if (columnValue == null || columnValue.toString().trim().isEmpty()) {
+					if (columnValue == null || columnValue.toString().trim().isEmpty() || columnValue.toString().trim().equalsIgnoreCase("null") || columnValue.toString().trim().equalsIgnoreCase("n/a")) {
 						dim_values.add(null);
 						curr.put(fieldType.getName(), null);
 					} else {
@@ -180,7 +180,7 @@ public class CsvFormatWriter {
 				}
 			} else if (fieldType.getType() == FieldTypeEnum.BOOLEAN) {
 				try {
-					if (columnValue == null || columnValue.toString().trim().isEmpty()) {
+					if (columnValue == null || columnValue.toString().trim().isEmpty() || columnValue.toString().trim().equalsIgnoreCase("null") || columnValue.toString().trim().equalsIgnoreCase("n/a")) {
 						dim_values.add(null);
 						curr.put(fieldType.getName(), null);
 					} else {
@@ -198,7 +198,7 @@ public class CsvFormatWriter {
 							fieldType.getName() + " is not a valid boolean, value {" + columnValue + "}", 0);
 				}
 			} else {
-				if (columnValue != null) {
+				if (columnValue != null && !columnValue.toString().trim().equalsIgnoreCase("null")) {
 					dim_values.add(columnValue.toString());
 				} else {
 					dim_values.add(null);
@@ -285,19 +285,19 @@ public class CsvFormatWriter {
 
 		if (writer == null) {
 			if (filePart == 0)
-				this.ouputFile = new File(outputDir, outPutFileName + ".gz");
-			else {
-				String outputFilePrefix = FilenameUtils.getBaseName(outPutFileName);
-				String outputFileExtension = FilenameUtils.getExtension(outPutFileName);
-				this.ouputFile = new File(outputDir,
-						outputFilePrefix + "." + filePart + "." + outputFileExtension + ".gz");
+			{
+				this.ouputFile = new File(outputDir, uploadFilePrefix + ".csv.gz");
+			}else {
+				this.ouputFile = new File(outputDir, uploadFilePrefix + "." + filePart + "."  + ".csv.gz");
 			}
-
 			writer = new CSVWriter(new BufferedWriter(
 					new OutputStreamWriter(new GzipCompressorOutputStream(new FileOutputStream(this.ouputFile)),
 							StringUtilsExt.utf8Charset),
 					Constants.DEFAULT_BUFFER_SIZE), ',', '"');
-			writer.writeRecord(this.getHeader());
+			//for(int cnt=0;cnt<headerLinesToIgnore;cnt++)
+			{
+				writer.writeRecord(this.getHeader());
+			}
 		}
 
 	}

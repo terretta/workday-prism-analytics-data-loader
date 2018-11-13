@@ -104,7 +104,7 @@ public class UploadWorker implements Runnable {
 			try {
 				System.out.println("START Uploading file {" + this.csvFile + "} to dataset: " + datasetName);
 				status = com.wday.prism.dataset.file.loader.DatasetLoader.uploadDataset(tenantURL, apiVersion,
-						tenantName, accessToken, csvFile, schemaFile, uploadFormat, codingErrorAction, inputFileCharset,
+						tenantName, accessToken, new File(csvFile), schemaFile, uploadFormat, codingErrorAction, inputFileCharset,
 						datasetName, datasetLabel, operation, logger, createDataset);
 				if (status)
 					session.end();

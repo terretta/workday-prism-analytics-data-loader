@@ -30,6 +30,7 @@ package com.wday.prism.dataset.file.loader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.PrintStream;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
@@ -39,13 +40,18 @@ import java.text.NumberFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.TimeZone;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.zip.GZIPInputStream;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
+import org.apache.commons.io.IOCase;
+import org.apache.commons.io.filefilter.FileFilterUtils;
+import org.apache.commons.io.filefilter.IOFileFilter;
 import org.apache.http.client.ClientProtocolException;
 
 import com.wday.prism.dataset.api.DataAPIConsumer;
@@ -57,6 +63,7 @@ import com.wday.prism.dataset.monitor.Session;
 import com.wday.prism.dataset.monitor.ThreadContext;
 import com.wday.prism.dataset.util.CSVReader;
 import com.wday.prism.dataset.util.CharsetChecker;
+import com.wday.prism.dataset.util.FileUtilsExt;
 
 /**
  * The Class DatasetLoader.
@@ -79,7 +86,7 @@ public class DatasetLoader {
 	 * @param apiVersion
 	 * @param tenantName
 	 * @param accessToken
-	 * @param inputFileString
+	 * @param uploadFile
 	 * @param schemaFileString
 	 * @param uploadFormat
 	 * @param codingErrorAction
@@ -92,13 +99,13 @@ public class DatasetLoader {
 	 * @throws DatasetLoaderException
 	 */
 	public static boolean uploadDataset(String tenantURL, String apiVersion, String tenantName, String accessToken,
-			String inputFileString, String schemaFileString, String uploadFormat, CodingErrorAction codingErrorAction,
+			File uploadFile, String schemaFileString, String uploadFormat, CodingErrorAction codingErrorAction,
 			Charset inputFileCharset, String datasetAlias, String datasetLabel, String operation, PrintStream logger,
 			boolean createDataset) throws DatasetLoaderException {
 		File archiveDir = null;
 		File datasetArchiveDir = null;
 		File bucketDir = null;
-		File inputFile = null;
+//		File inputFile = null;
 		File schemaFile = null;
 		boolean status = true;
 		long uploadTime = 0L;
@@ -117,12 +124,107 @@ public class DatasetLoader {
 
 		if (logger == null)
 			logger = System.out;
+		
+		if(uploadFile==null)
+		{
+			logger.println("Error: Upload File is null");
+			throw new DatasetLoaderException("Upload File is null");	
+		}
+		
+		if (!uploadFile.exists()) {
+			logger.println("Error: File {" + uploadFile.getAbsolutePath() + "} not found");
+			throw new DatasetLoaderException("File {" + uploadFile.getAbsolutePath() + "} not found");
+		}
+
+		
+		File uploadBaseDir = uploadFile.getParentFile();
+		String uploadFilePrefix =  FileUtilsExt.getBaseName(uploadFile);
+		archiveDir = new File(uploadBaseDir, "archive");
+		
+		List<File> inputFiles = new LinkedList<File>();
+
+		if(uploadFile.isDirectory())
+		{	
+			try {
+				IOFileFilter suffixFileFilter1 = FileFilterUtils.suffixFileFilter(".csv.gz", IOCase.INSENSITIVE);
+				IOFileFilter suffixFileFilter2 = FileFilterUtils.suffixFileFilter(".csv", IOCase.INSENSITIVE);
+				IOFileFilter orFileFilter = FileFilterUtils.or(suffixFileFilter1, suffixFileFilter2);
+				File[] files = FolderUploader.getFiles(uploadFile, orFileFilter);
+				if (files != null) {				
+					for (File file : files) {
+
+						if (file == null) {
+							logger.println("Error: Input File is null");
+							throw new DatasetLoaderException("Input File is null");
+						}
+						
+						if (file.getName().toLowerCase().endsWith("__err.csv"))
+							continue;
+						
+
+						if (!file.exists()) {
+							logger.println("Error: File {" + file.getAbsolutePath() + "} not found");
+							throw new DatasetLoaderException("File {" + file.getAbsolutePath() + "} not found");
+						}
+
+						if (file.length() == 0) {
+							logger.println("Error: File {" + file.getAbsolutePath() + "} is empty");
+							throw new DatasetLoaderException("Error: File {" + file.getAbsolutePath() + "} is empty");
+						}
+						inputFiles.add(file);
+					}
+				}
+			} catch (Throwable t) {
+				t.printStackTrace();
+				throw new DatasetLoaderException(t.toString());
+			}
+			
+			if(inputFiles.size()==0)
+			{
+				logger.println("Input File {"+uploadFile+"} does not contain any valid .csv or .csv.gz files");
+				throw new DatasetLoaderException("Input File {"+uploadFile+"} does not contain any valid .csv or .csv.gz files");				
+			}			
+		}else
+		{
+			if (uploadFile.length() == 0) {
+				logger.println("Error: File {" + uploadFile.getAbsolutePath() + "} is empty");
+				throw new DatasetLoaderException("Error: File {" + uploadFile.getAbsolutePath() + "} is empty");
+			}
+
+			String ext = FilenameUtils.getExtension(uploadFile.getName());
+			if(ext!=null && ext.equalsIgnoreCase("csv"))
+			{
+					if (uploadFile.length() > Constants.MAX_UNCOMPRESSED_FILE_LENGTH) {
+						logger.println("Error: File {" + uploadFile.getAbsolutePath()
+								+ "} size is greater than the max supported size: "
+								+ Constants.MAX_UNCOMPRESSED_FILE_LENGTH / FileUtils.ONE_GB + "GB");
+						throw new DatasetLoaderException("Error: File {" + uploadFile.getAbsolutePath()
+								+ "} size is greater than the max supported size: "
+								+ Constants.MAX_UNCOMPRESSED_FILE_LENGTH / FileUtils.ONE_GB + "GB");
+					}
+			} else if(ext!=null && ext.equalsIgnoreCase("gz"))
+			{
+					if (uploadFile.length() > Constants.MAX_COMPRESSED_FILE_LENGTH) {
+						logger.println("Error: File {" + uploadFile.getAbsolutePath()
+								+ "} size is greater than the max supported size: "
+								+ Constants.MAX_COMPRESSED_FILE_LENGTH / FileUtils.ONE_GB + "GB");
+						throw new DatasetLoaderException("Error: File {" + uploadFile.getAbsolutePath()
+								+ "} size is greater than the max supported size: "
+								+ Constants.MAX_COMPRESSED_FILE_LENGTH / FileUtils.ONE_GB + "GB");
+					}
+			}else
+			{
+				throw new DatasetLoaderException("Error: File {" + uploadFile.getAbsolutePath() + "} has invalid extension only .csv and .csv.gz is supported");
+			}
+			inputFiles.add(uploadFile);
+		}
+		
 
 		if (inputFileCharset == null) {
 			Charset tmp = null;
 			try {
-				inputFile = new File(inputFileString);
-				if (inputFile.exists() && inputFile.length() > 0) {
+				File inputFile = inputFiles.get(0);
+				if (inputFile != null && inputFile.exists() && inputFile.length() > 0) {
 					tmp = CharsetChecker.detectCharset(inputFile, logger);
 				}
 			} catch (Exception e) {
@@ -136,7 +238,7 @@ public class DatasetLoader {
 		}
 
 		if (operation == null) {
-			operation = "Replace";
+			operation = "replace";
 		}
 
 		if (datasetLabel == null || datasetLabel.trim().isEmpty()) {
@@ -148,7 +250,7 @@ public class DatasetLoader {
 
 		logger.println("\n*******************************************************************************");
 		logger.println("Start Timestamp: " + logformat.format(new Date()));
-		logger.println("inputFile: " + inputFileString);
+		logger.println("inputFile: " + uploadFile);
 		logger.println("schemaFile: " + schemaFileString);
 		logger.println("inputFileCharset: " + inputFileCharset);
 		logger.println("dataset: " + datasetAlias);
@@ -162,25 +264,6 @@ public class DatasetLoader {
 
 		try {
 
-			inputFile = new File(inputFileString);
-			if (!inputFile.exists()) {
-				logger.println("Error: File {" + inputFile.getAbsolutePath() + "} not found");
-				throw new DatasetLoaderException("File {" + inputFile.getAbsolutePath() + "} not found");
-			}
-
-			if (inputFile.length() == 0) {
-				logger.println("Error: File {" + inputFile.getAbsolutePath() + "} is empty");
-				throw new DatasetLoaderException("Error: File {" + inputFile.getAbsolutePath() + "} is empty");
-			}
-
-			if (inputFile.length() > Constants.MAX_UNCOMPRESSED_FILE_LENGTH) {
-				logger.println("Error: File {" + inputFile.getAbsolutePath()
-						+ "} size is greater than the max supported size: "
-						+ Constants.MAX_UNCOMPRESSED_FILE_LENGTH / FileUtils.ONE_GB + "GB");
-				throw new DatasetLoaderException("Error: File {" + inputFile.getAbsolutePath()
-						+ "} size is greater than the max supported size: "
-						+ Constants.MAX_UNCOMPRESSED_FILE_LENGTH / FileUtils.ONE_GB + "GB");
-			}
 
 			if (schemaFileString != null) {
 				schemaFile = new File(schemaFileString);
@@ -235,18 +318,18 @@ public class DatasetLoader {
 			}
 
 			if (schemaFile == null)
-				schemaFile = FileSchema.getSchemaFile(inputFile, logger);
+				schemaFile = FileSchema.getSchemaFile(uploadFile, logger);
 
 			FileSchema schema = null;
 
-			String fileExt = FilenameUtils.getExtension(inputFile.getName());
-			boolean isParsable = false;
-			if (fileExt != null && (fileExt.equalsIgnoreCase("csv") || fileExt.equalsIgnoreCase("txt"))) {
-				isParsable = true;
-			}
+//			String fileExt = FilenameUtils.getExtension(inputFile.getName());
+//			boolean isParsable = false;
+//			if (fileExt != null && (fileExt.equalsIgnoreCase("csv") || fileExt.equalsIgnoreCase("txt"))) {
+//				isParsable = true;
+//			}
 
-			if (!isParsable)
-				throw new DatasetLoaderException("Error: Input file should be .csv type");
+//			if (!isParsable)
+//				throw new DatasetLoaderException("Error: Input file should be .csv type");
 
 			if (session.isDone()) {
 				throw new DatasetLoaderException("operation terminated on user request");
@@ -254,41 +337,42 @@ public class DatasetLoader {
 
 			if (schema == null) {
 				logger.println("\n*******************************************************************************");
-				if (isParsable) {
+//				if (isParsable) {
 					if (schemaFile != null && schemaFile.exists() && schemaFile.length() > 0)
 						session.setStatus("LOADING SCHEMA");
 					else
 						session.setStatus("DETECTING SCHEMA");
 
-					schema = FileSchema.init(inputFile, schemaFile, inputFileCharset, logger);
+					schema = FileSchema.init(inputFiles.get(0), schemaFile, inputFileCharset, logger);
 					if (schema == null) {
 						logger.println(
-								"Failed to parse schema file {" + FileSchema.getSchemaFile(inputFile, logger) + "}");
+								"Failed to parse schema file {" + schemaFile + "}");
 						throw new DatasetLoaderException(
-								"Failed to parse schema file {" + FileSchema.getSchemaFile(inputFile, logger) + "}");
+								"Failed to parse schema file {" + schemaFile + "}");
 					}
 				}
 				logger.println("*******************************************************************************\n");
-			}
+//			}
 
 			if (schema != null) {
-				if ((operation.equalsIgnoreCase("Upsert") || operation.equalsIgnoreCase("Delete"))
+				if ((operation.equalsIgnoreCase("upsert") || operation.equalsIgnoreCase("delete"))
 						&& !FileSchema.hasUniqueID(schema)) {
-					throw new DatasetLoaderException("Schema File {" + FileSchema.getSchemaFile(inputFile, logger)
+					throw new DatasetLoaderException("Schema File {" + schemaFile
 							+ "} must have uniqueId set for atleast one field");
 				}
 
-				if (operation.equalsIgnoreCase("Append") && FileSchema.hasUniqueID(schema)) {
-					throw new DatasetLoaderException("Schema File {" + FileSchema.getSchemaFile(inputFile, logger)
-							+ "} has a uniqueId set. Choose 'Upsert' operation instead");
+				if (operation.equalsIgnoreCase("append") && FileSchema.hasUniqueID(schema)) {
+					throw new DatasetLoaderException("Schema File {" + schemaFile
+							+ "} has a uniqueId set. Choose 'upsert' operation instead");
 				}
 			}
 
 			if (session.isDone()) {
 				throw new DatasetLoaderException("operation terminated on user request");
 			}
-
-			archiveDir = new File(inputFile.getParent(), "archive");
+			
+			
+			
 			try {
 				FileUtils.forceMkdir(archiveDir);
 			} catch (Throwable t) {
@@ -302,13 +386,11 @@ public class DatasetLoader {
 				t.printStackTrace();
 			}
 
-			FileSchema altSchema = schema;
-
-			String hdrId = insertFileHdr(tenantURL, apiVersion, tenantName, accessToken, datasetAlias, datasetId,
-					datasetLabel, altSchema, operation, logger);
+			String hdrId = createBucket(tenantURL, apiVersion, tenantName, accessToken, datasetAlias, datasetId,
+					datasetLabel, schema, operation, logger);
 
 			if (hdrId == null || hdrId.isEmpty()) {
-				throw new DatasetLoaderException("Error: failed to Bucket for Dataset: " + datasetAlias);
+				throw new DatasetLoaderException("Error: failed to create Bucket for Dataset: " + datasetAlias);
 			}
 
 			session.setParam(Constants.hdrIdParam, hdrId);
@@ -324,7 +406,7 @@ public class DatasetLoader {
 				t.printStackTrace();
 			}
 
-			readInputFile(inputFile, bucketDir, hdrId, schema, logger, inputFileCharset, session, q);
+			readInputFile(inputFiles,uploadBaseDir,uploadFilePrefix, bucketDir, hdrId, schema, logger, inputFileCharset, session, q);
 
 			if (session.isDone()) {
 				throw new DatasetLoaderException("operation terminated on user request");
@@ -387,10 +469,10 @@ public class DatasetLoader {
 
 			logger.println("\n*******************************************************************************");
 			if (status)
-				logger.println("Successfully uploaded {" + inputFile + "} to Dataset {" + datasetAlias
+				logger.println("Successfully uploaded {" + uploadFile + "} to Dataset {" + datasetAlias
 						+ "} Processing Time {" + nf.format(uploadTime) + "} msecs");
 			else
-				logger.println("Failed to load {" + inputFile + "} to Dataset {" + datasetAlias + "}");
+				logger.println("Failed to load {" + uploadFile + "} to Dataset {" + datasetAlias + "}");
 			logger.println("*******************************************************************************\n");
 
 			logger.println("\n*******************************************************************************");
@@ -427,7 +509,7 @@ public class DatasetLoader {
 	 * @throws DatasetLoaderException
 	 *             the dataset loader exception
 	 */
-	private static String insertFileHdr(String tenantURL, String apiVersion, String tenantName, String accessToken,
+	private static String createBucket(String tenantURL, String apiVersion, String tenantName, String accessToken,
 			String datasetAlias, String datasetId, String datasetLabel, FileSchema schema, String operation,
 			PrintStream logger) throws DatasetLoaderException {
 		String rowId = null;
@@ -487,43 +569,62 @@ public class DatasetLoader {
 		return null;
 	}
 
-	private static void readInputFile(File inputFile, File bucketDir, String hdrId, FileSchema schema,
+	private static void readInputFile(List<File> inputFiles,File uploadBaseDir, String uploadFilePrefix, File bucketDir, String hdrId, FileSchema schema,
 			PrintStream logger, Charset inputFileCharset, Session session, BlockingQueue<List<String>> q)
 			throws DatasetLoaderException, IOException {
 		CSVReader reader = null;
 		ErrorWriter errorWriter = null;
 		WriterThread writer = null;
 		// boolean status = false;
-		long totalRowCount = 0;
-		long successRowCount = 0;
-		long errorRowCount = 0;
+		long totalInputFileSize = 0L;
+		long totalRowCount = 0L;
+		long successRowCount = 0L;
+		long errorRowCount = 0L;
 		long startTime = System.currentTimeMillis();
 
 		try {
 
 			try {
+				
+				
 
-				errorWriter = new ErrorWriter(inputFile, schema.getParseOptions().getFieldsDelimitedBy().charAt(0),
+				errorWriter = new ErrorWriter(uploadBaseDir, uploadFilePrefix,schema.getFields(), schema.getParseOptions().getFieldsDelimitedBy().charAt(0),
 						inputFileCharset);
-
+				
 				if (session != null) {
 					session.setParam(Constants.errorCsvParam, errorWriter.getErrorFile().getAbsolutePath());
 				}
 
-				reader = new CSVReader(new FileInputStream(inputFile), inputFileCharset.name(),
-						new char[] { schema.getParseOptions().getFieldsDelimitedBy().charAt(0) });
-				writer = new WriterThread(q, inputFile, bucketDir, schema.getFields(), errorWriter, logger, session);
+				writer = new WriterThread(q, uploadFilePrefix, bucketDir, schema.getFields(), errorWriter, logger, session, schema.getParseOptions().getHeaderLinesToIgnore());
 				Thread th = new Thread(writer, "Writer-Thread");
 				th.setDaemon(true);
 				th.start();
+				
+			//Loop over the files
+			for(File inputFile:inputFiles)
+			{
+				long rowCount = 0L;
+				
+				if (session.isDone()) {
+					throw new DatasetLoaderException("operation terminated on user request");
+				}
+
+				InputStream is = null;
+				if (FileUtilsExt.isGzipFile(inputFile)) {
+					is = new GZIPInputStream(new FileInputStream(inputFile),Constants.DEFAULT_BUFFER_SIZE);
+				} else {
+					is = new FileInputStream(inputFile);
+				}
+				reader = new CSVReader(is, inputFileCharset.name(),
+						new char[] { schema.getParseOptions().getFieldsDelimitedBy().charAt(0) });
 
 				boolean hasmore = true;
-				logger.println("\n*******************************************************************************");
-				logger.println(
-						"File: " + inputFile.getName() + ", being digested to file: " + inputFile.getName() + ".gz");
-				logger.println("*******************************************************************************\n");
 				if (session != null)
 					session.setStatus("DIGESTING");
+				logger.println("\n*******************************************************************************");
+				logger.println("File: " + inputFile + ", being digested ");
+				logger.println("*******************************************************************************\n");
+
 				List<String> row = null;
 				while (hasmore) {
 					if (session != null && session.isDone()) {
@@ -531,9 +632,10 @@ public class DatasetLoader {
 					}
 					try {
 						totalRowCount++;
+						rowCount++;
 						row = reader.nextRecord();
 						if (row != null && !writer.isDone() && !writer.isAborted()) {
-							if (totalRowCount == 1)
+							if (rowCount <= schema.getParseOptions().getHeaderLinesToIgnore())
 								continue;
 							if (row.size() != 0) {
 								q.put(row);
@@ -541,12 +643,13 @@ public class DatasetLoader {
 								errorRowCount++;
 							}
 						} else {
+							rowCount--;
 							totalRowCount--;
 							hasmore = false;
 						}
 					} catch (Exception t) {
 						errorRowCount++;
-						logger.println("Line {" + (totalRowCount) + "} has error {" + t + "}");
+						logger.println("File {"+inputFile+"} at Line {" + (rowCount) + "} has error {" + t + "}");
 
 						if (t instanceof MalformedInputException || errorRowCount >= Constants.max_error_threshhold) {
 							// status = false;
@@ -589,8 +692,11 @@ public class DatasetLoader {
 						}
 					}
 				} // end while
-				int retryCount = 0;
-				while (!writer.isDone()) {
+				totalInputFileSize = totalInputFileSize + inputFile.length();
+			} //end files 
+			
+			int retryCount = 0;
+			while (!writer.isDone()) {
 					try {
 						if (retryCount % 10 == 0) {
 							q.put(new ArrayList<String>(0));
@@ -638,7 +744,7 @@ public class DatasetLoader {
 			logger.println("\n*******************************************************************************");
 			logger.println("Total Rows: " + nf.format(totalRowCount - 1) + ", Success Rows: "
 					+ nf.format(successRowCount) + ", Error Rows: " + nf.format(errorRowCount) + ", % Compression: "
-					+ (inputFile.length() / writer.getTotalFileSize()) * 100 + "%" + ", Digest Time {"
+					+ (totalInputFileSize / writer.getTotalFileSize()) * 100 + "%" + ", Digest Time {"
 					+ nf.format(digestTime) + "} msecs");
 			logger.println("*******************************************************************************\n");
 		} finally {

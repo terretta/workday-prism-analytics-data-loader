@@ -55,6 +55,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wday.prism.dataset.file.loader.DatasetLoaderException;
 import com.wday.prism.dataset.util.CSVReader;
 import com.wday.prism.dataset.util.CharsetChecker;
+import com.wday.prism.dataset.util.FileUtilsExt;
 import com.wday.prism.dataset.util.SeparatorGuesser;
 import com.wday.prism.dataset.util.StringUtilsExt;
 
@@ -152,14 +153,18 @@ public class FileSchema {
 		}
 
 		FileSchema userSchema = FileSchema.load(csvFile, schemaFile, fileCharset, logger);
-		FileSchema autoSchema = FileSchema.createAutoSchema(csvFile, userSchema, fileCharset, logger);
+		FileSchema autoSchema = null;
+		if (userSchema == null || userSchema.getParseOptions().getHeaderLinesToIgnore()!=0)
+		{
+		 autoSchema = FileSchema.createAutoSchema(csvFile, userSchema, fileCharset, logger);
+		}
 
 		if (autoSchema == null && userSchema != null) {
 			autoSchema = userSchema;
 		}
 
 		if (userSchema == null && autoSchema != null) {
-			FileSchema.save(csvFile, autoSchema, logger);
+			FileSchema.save(schemaFile!=null?schemaFile:csvFile, autoSchema, logger);
 			userSchema = autoSchema;
 		}
 
@@ -167,7 +172,7 @@ public class FileSchema {
 			FileSchema schema = FileSchema.merge(userSchema, autoSchema, logger);
 			if (!schema.equals(userSchema)) {
 				logger.println("Saving merged schema");
-				FileSchema.save(csvFile, schema, logger);
+				FileSchema.save(schemaFile!=null?schemaFile:csvFile, schema, logger);
 			}
 			newSchema = schema;
 		} else {
@@ -619,11 +624,9 @@ public class FileSchema {
 
 	public static File getSchemaFile(File csvFile, PrintStream logger) {
 		try {
-			// init(csvFile);
 			if (!csvFile.getName().toUpperCase().endsWith(SCHEMA_FILE_SUFFIX)) {
-				FilenameUtils.getBaseName(csvFile.getName());
 				csvFile = new File(csvFile.getParent(),
-						FilenameUtils.getBaseName(csvFile.getName()) + SCHEMA_FILE_SUFFIX);
+						 FileUtilsExt.getBaseName(csvFile) + SCHEMA_FILE_SUFFIX);
 				return csvFile;
 			} else {
 				return csvFile;
@@ -875,7 +878,7 @@ public class FileSchema {
 	public void clearNumericParseFormat() {
 		if (fields != null) {
 			for (FieldType user_field : fields) {
-				if (user_field != null && user_field.getType() == FieldTypeEnum.NUMERIC
+				if (user_field != null && user_field.getType() != FieldTypeEnum.DATE
 						&& user_field.getParseFormat() != null)
 					user_field.setParseFormat(null);
 			}

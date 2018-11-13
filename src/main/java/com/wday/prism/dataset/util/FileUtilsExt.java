@@ -206,5 +206,14 @@ public class FileUtilsExt {
 		else
 			return false;
 	}
+	
+	public static String getBaseName(File input)
+	{
+		String baseName = FilenameUtils.getBaseName(input.getName());
+		String ext = FilenameUtils.getExtension(input.getName());
+		if(ext.equalsIgnoreCase("gz"))
+			baseName = FilenameUtils.getBaseName(baseName);
+		return baseName;
+	}
 
 }

@@ -33,12 +33,14 @@ import java.net.URISyntaxException;
 import java.nio.charset.Charset;
 import java.security.NoSuchAlgorithmException;
 import java.util.List;
+import java.util.zip.GZIPInputStream;
 
 import org.apache.http.client.ClientProtocolException;
 
 import com.wday.prism.dataset.api.DataAPIConsumer;
 import com.wday.prism.dataset.api.types.DatasetType;
 import com.wday.prism.dataset.api.types.GetBucketResponseType;
+import com.wday.prism.dataset.constants.Constants;
 import com.wday.prism.dataset.file.loader.DatasetLoaderException;
 import com.wday.prism.dataset.file.schema.FileSchema;
 import com.wday.prism.dataset.util.APIEndpoint;
@@ -59,9 +61,10 @@ public class PrismDataAPIWrapper {
 				clientSecret, refreshToken, System.out);
 	}
 
-	public static String detectSchema(InputStream csvFile, char delim, String fileCharset)
+	public static String detectSchema(InputStream csvFile, String fileName,char delim, String fileCharset)
 			throws IOException, DatasetLoaderException {
-		FileSchema schema = FileSchema.createAutoSchema(csvFile, delim,
+		boolean isGzipCompressed = fileName != null && fileName.endsWith(".gz");
+		FileSchema schema = FileSchema.createAutoSchema((isGzipCompressed?(new GZIPInputStream(csvFile,Constants.DEFAULT_BUFFER_SIZE)):csvFile), delim,
 				fileCharset != null ? Charset.forName(fileCharset) : null, System.out);
 		return schema.toString();
 	}

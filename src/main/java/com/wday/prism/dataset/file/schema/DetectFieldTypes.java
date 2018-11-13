@@ -84,7 +84,7 @@ public class DetectFieldTypes {
 
 		InputStream is = null;
 		if (FileUtilsExt.isGzipFile(inputCsv)) {
-			is = new GZIPInputStream(new FileInputStream(inputCsv));
+			is = new GZIPInputStream(new FileInputStream(inputCsv),Constants.DEFAULT_BUFFER_SIZE);
 		} else {
 			is = new FileInputStream(inputCsv);
 		}
@@ -132,6 +132,7 @@ public class DetectFieldTypes {
 
 		try {
 
+			/*
 			if (userSchema != null && userSchema.getParseOptions() != null
 					&& userSchema.getParseOptions().getHeaderLinesToIgnore() > 0) {
 				List<FieldType> fields = userSchema.getFields();
@@ -148,6 +149,7 @@ public class DetectFieldTypes {
 					return fields;
 				}
 			}
+			*/
 
 			// List<String> nextLine = null;
 			types = new LinkedList<FieldType>();

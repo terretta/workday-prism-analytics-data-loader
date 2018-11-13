@@ -29,19 +29,16 @@ package com.wday.prism.dataset.file.loader;
 
 import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.charset.Charset;
-import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.io.IOUtils;
 
 import com.wday.prism.dataset.constants.Constants;
-import com.wday.prism.dataset.util.CSVReader;
+import com.wday.prism.dataset.file.schema.FieldType;
 import com.wday.prism.dataset.util.CSVWriter;
 import com.wday.prism.dataset.util.FileUtilsExt;
 import com.wday.prism.dataset.util.Logger;
@@ -57,14 +54,11 @@ public class ErrorWriter {
 	/** The Header line. */
 	private String HeaderLine = "";
 
-	/** The header columns. */
-	private ArrayList<String> headerColumns = null;
-
 	/** The Header suffix. */
 	private String HeaderSuffix = "Error";
 
 	/** The error file suffix. */
-	public static String errorFileSuffix = "_err.";
+	public static String errorFileSuffix = "__err.csv";
 
 	/** The error csv. */
 	private File errorCsv;
@@ -96,38 +90,26 @@ public class ErrorWriter {
 	 * @throws IOException
 	 *             Signals that an I/O exception has occurred.
 	 */
-	public ErrorWriter(File inputCsv, char delimiter, Charset inputFileCharset) throws IOException {
-		if (inputCsv == null || !inputCsv.exists()) {
-			throw new IOException("inputCsv file {" + inputCsv + "} does not exist");
+	public ErrorWriter(File uploadBaseDir, String uploadFilePrefix,List<FieldType> fieldList, char delimiter, Charset inputFileCharset) throws IOException {
+		if (uploadBaseDir == null || !uploadBaseDir.exists()) {
+			throw new IOException("input file {" + uploadBaseDir + "} does not exist");
 		}
 
 		this.delimiter = delimiter;
-
-		CSVReader reader = new CSVReader(new FileInputStream(inputCsv), inputFileCharset.name(), delimiter);
-		headerColumns = reader.nextRecord();
-		reader.finalise();
-
+	
 		StringBuffer hdrLine = new StringBuffer();
 		hdrLine.append(HeaderSuffix);
-		int cnt = 0;
-		for (String hdr : headerColumns) {
-			cnt++;
+		for (FieldType field : fieldList) {
 			hdrLine.append(this.delimiter);
-			hdrLine.append(hdr);
-			if (hdrLine.length() > 400000)
-				break;
-			if (cnt > 5000)
-				break;
+			hdrLine.append(field.getName());
 		}
 		this.HeaderLine = hdrLine.toString();
 
-		this.errorCsv = new File(inputCsv.getParent(), FilenameUtils.getBaseName(inputCsv.getName()) + errorFileSuffix
-				+ FilenameUtils.getExtension((inputCsv.getName())));
+		this.errorCsv = new File(uploadBaseDir, uploadFilePrefix + errorFileSuffix);
 		if (this.errorCsv.exists()) {
 			try {
-				File archiveDir = new File(inputCsv.getParent(), "archive");
 				FileUtils.moveFile(this.errorCsv,
-						new File(archiveDir, this.errorCsv.getName() + "." + this.errorCsv.lastModified()));
+						new File(this.errorCsv.getName() + "." + this.errorCsv.lastModified()));
 			} catch (Throwable t) {
 				FileUtilsExt.deleteQuietly(this.errorCsv);
 			}

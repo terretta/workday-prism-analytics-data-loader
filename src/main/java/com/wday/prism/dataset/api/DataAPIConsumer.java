@@ -29,6 +29,7 @@ package com.wday.prism.dataset.api;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
@@ -84,6 +85,7 @@ import com.wday.prism.dataset.file.loader.DatasetLoaderException;
 import com.wday.prism.dataset.file.schema.FileSchema;
 import com.wday.prism.dataset.util.FasterBufferedInputStream;
 import com.wday.prism.dataset.util.FileUtilsExt;
+import com.wday.prism.dataset.util.GZipInputStreamDeflater;
 import com.wday.prism.dataset.util.HttpUtils;
 
 /**
@@ -147,11 +149,18 @@ public class DataAPIConsumer {
 			throw new IllegalArgumentException("bucketId cannot be blank");
 		}
 
-		if (fileName == null || fileName.trim().isEmpty() || !fileName.trim().toLowerCase().endsWith(".gz")) {
-			throw new IllegalArgumentException("file must be gzip compressed");
+		if (fileName == null || fileName.trim().isEmpty() ) {
+			throw new IllegalArgumentException("file name cannot be blank");
+		}
+		
+		
+		FilterInputStream bis = new FasterBufferedInputStream(fileinputStream, bufferSize);
+		if (!fileName.trim().toLowerCase().endsWith(".gz")) {
+			bis = new GZipInputStreamDeflater(bis);
+			fileName = fileName + ".gz";
 		}
 
-		CountingInputStream cis = new CountingInputStream(new FasterBufferedInputStream(fileinputStream, bufferSize));
+		CountingInputStream cis = new CountingInputStream(bis);
 		MessageDigest md = MessageDigest.getInstance("MD5");
 		DigestInputStream dis = new DigestInputStream(cis, md);
 
@@ -384,10 +393,15 @@ public class DataAPIConsumer {
 			throw new DatasetLoaderException(
 					"Could not authenticate with Workday: " + response.getStatusLine().toString());
 		}
+		
+		String responseString = null;
 		HttpEntity responseEntity = response.getEntity();
-		InputStream is = responseEntity.getContent();
-		String responseString = IOUtils.toString(is, "UTF-8");
-		is.close();
+		if(responseEntity!=null)
+		{
+			InputStream is = responseEntity.getContent();
+			responseString = IOUtils.toString(is, "UTF-8");
+			is.close();
+		}
 
 		if (responseString != null && !responseString.isEmpty()) {
 			ObjectMapper mapper = new ObjectMapper();
@@ -395,9 +409,9 @@ public class DataAPIConsumer {
 			Map res = mapper.readValue(responseString, Map.class);
 			access_token = (String) res.get("access_token");
 			if (access_token != null)
-				return access_token;
+				return access_token;				
 		}
-		throw new DatasetLoaderException("Could not authenticate with Workday: " + response.getStatusLine().toString());
+		throw new DatasetLoaderException("Could not authenticate with Workday: " + response.getStatusLine().toString() + " :: "+responseString);
 	}
 
 	public static String createBucket(String tenantURL, String apiVersion, String tenantName, String accessToken,
@@ -406,7 +420,12 @@ public class DataAPIConsumer {
 		logger.println();
 
 		if (schema != null)
+		{
+			schema = FileSchema.load(schema.toString(), logger);
 			schema.clearNumericParseFormat();
+			schema.getParseOptions().setFieldsDelimitedBy(",");
+			schema.getParseOptions().setHeaderLinesToIgnore(1);
+		}
 
 		CreateBucketRequestType createBucketRequestType = new CreateBucketRequestType();
 		createBucketRequestType.setDatasetId(datasetId);

@@ -68,15 +68,17 @@ public class FolderUploader {
 		try {
 
 			try {
+				IOFileFilter suffixFileFilter1 = FileFilterUtils.suffixFileFilter(".csv.gz", IOCase.INSENSITIVE);
 				IOFileFilter suffixFileFilter2 = FileFilterUtils.suffixFileFilter(".csv", IOCase.INSENSITIVE);
+				IOFileFilter orFileFilter = FileFilterUtils.or(suffixFileFilter1, suffixFileFilter2);
 
-				File[] files = getFiles(new File(csvFile), suffixFileFilter2);
+				File[] files = getFiles(new File(csvFile), orFileFilter);
 				if (files == null) {
 					return false;
 				}
 
 				for (File file : files) {
-					if (file.getName().toLowerCase().endsWith("_err.csv"))
+					if (file.getName().toLowerCase().endsWith(ErrorWriter.errorFileSuffix))
 						continue;
 
 					Session session = null;
