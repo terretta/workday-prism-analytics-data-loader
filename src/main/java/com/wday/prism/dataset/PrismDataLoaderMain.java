@@ -30,6 +30,7 @@ package com.wday.prism.dataset;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.charset.Charset;
@@ -39,6 +40,7 @@ import java.util.Properties;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.FilenameUtils;
+import org.apache.http.client.ClientProtocolException;
 
 import com.wday.prism.dataset.api.DataAPIConsumer;
 import com.wday.prism.dataset.constants.Constants;
@@ -133,6 +135,8 @@ public class PrismDataLoaderMain {
 				} else if (args[i - 1].equalsIgnoreCase("--debug")) {
 					params.debug = true;
 					Constants.debug = true;
+				} else if (args[i - 1].equalsIgnoreCase("--parseContent")) {
+					params.parseContent = true;
 				} else if (args[i - 1].equalsIgnoreCase("--inputFile")) {
 					String tmp = args[i];
 					if (tmp != null) {
@@ -180,13 +184,18 @@ public class PrismDataLoaderMain {
 						}
 						Constants.codingErrorAction = params.codingErrorAction;
 					}
+				} else if (args[i - 1].equalsIgnoreCase("--tablePrefix")) {
+					if (args[i] != null && !args[i].trim().isEmpty()) {
+						params.tablePrefix = FileSchema.createDevName(args[i], "Dataset", 1, false);
+					}else {
+						params.tablePrefix = null;
+					}
 				} else {
 					printUsage();
 					System.out.println("\nERROR: Invalid argument: " + args[i - 1]);
 					System.exit(-1);
 				}
 			} // end for
-
 		}
 
 		if (args.length == 0 || action == null) {
@@ -227,19 +236,19 @@ public class PrismDataLoaderMain {
 		System.out.println("");
 		System.out.println("Example 1: Upload a csv to a dataset");
 		System.out.println(
-				"java -jar workday-prism-analytics-data-loader-<version>.jar --action load --endpoint https://wd2-impl-services1.workday.com/ccx/api/v1/{tenantName} --u 12345#! --p @#@#@# --token A1B2C3A1B2C3A1B2C3A1B2C3 --inputFile Worker.csv --dataset test");
+				"java -jar workday-prism-analytics-data-loader-<tablePrefix>.jar --action load --endpoint https://wd2-impl-services1.workday.com/ccx/api/v1/{tenantName} --u 12345#! --p @#@#@# --token A1B2C3A1B2C3A1B2C3A1B2C3 --inputFile Worker.csv --dataset test");
 		System.out.println("");
 		System.out.println("Example 2: Upload all files in a folder to prism");
 		System.out.println(
-				"java -jar workday-prism-analytics-data-loader-<version>.jar --action loadAll --endpoint https://wd2-impl-services1.workday.com/ccx/api/v1/{tenantName} --u 12345#! --p @#@#@# --token A1B2C3A1B2C3A1B2C3A1B2C3 --inputFile dataDirectory");
+				"java -jar workday-prism-analytics-data-loader-<tablePrefix>.jar --action loadAll --endpoint https://wd2-impl-services1.workday.com/ccx/api/v1/{tenantName} --u 12345#! --p @#@#@# --token A1B2C3A1B2C3A1B2C3A1B2C3 --inputFile dataDirectory");
 		System.out.println("");
 		System.out.println("Example 3: Generate the schema file from CSV");
 		System.out.println(
-				"java -jar workday-prism-analytics-data-loader-<version>.jar --action createSchema --inputFile Worker.csv");
+				"java -jar workday-prism-analytics-data-loader-<tablePrefix>.jar --action createSchema --inputFile Worker.csv");
 		System.out.println("");
 		System.out.println("Example 4: detect file encoding");
 		System.out.println(
-				"java -jar workday-prism-analytics-data-loader-<version>.jar --action detectEncoding --inputFile Worker.csv");
+				"java -jar workday-prism-analytics-data-loader-<tablePrefix>.jar --action detectEncoding --inputFile Worker.csv");
 		System.out.println("");
 	}
 
@@ -378,6 +387,11 @@ public class PrismDataLoaderMain {
 					System.out.println("\n changing dataset name to: {" + santizedDatasetName + "}");
 					params.dataset = santizedDatasetName;
 				}
+				
+				if(action.equalsIgnoreCase("loadall") && params.tablePrefix!=null)
+				{
+					params.dataset = params.tablePrefix + "_" +	params.dataset;	
+				}
 			}
 		}
 
@@ -391,7 +405,7 @@ public class PrismDataLoaderMain {
 				try {
 					boolean status = FolderUploader.uploadFolder(params.endpoint.tenantURL, params.endpoint.apiVersion,
 							params.endpoint.tenant, params.accessToken, params.inputFile, params.schemaFile, "CSV",
-							params.codingErrorAction, params.fileEncoding, params.dataset, params.datasetLabel,
+							params.codingErrorAction, params.fileEncoding, params.dataset,params.tablePrefix ,params.datasetLabel,
 							params.operation, System.out, true);
 					return status;
 				} catch (DatasetLoaderException e) {
@@ -423,7 +437,7 @@ public class PrismDataLoaderMain {
 							params.endpoint.tenantURL, params.endpoint.apiVersion, params.endpoint.tenant,
 							params.accessToken, new File(params.inputFile), params.schemaFile, "CSV", params.codingErrorAction,
 							params.fileEncoding, params.dataset, params.datasetLabel, params.operation, System.out,
-							true);
+							true, params.parseContent);
 					if (status)
 						session.end();
 					else
@@ -502,15 +516,37 @@ public class PrismDataLoaderMain {
 		}
 
 		try {
-			params.accessToken = DataAPIConsumer.getAccessToken(params.endpoint.tenantURL, params.endpoint.apiVersion,
-					params.endpoint.tenant, params.username, params.password, params.token, System.out);
+			params.accessToken = getTenantCredentials(params.endpoint, params.username, params.password, params.token);
 		} catch (Throwable e) {
 			e.printStackTrace();
-			System.out.println("\nERROR: Invalid crednetials for workday tenant");
+			System.out.println("\nERROR: Invalid credentials for workday tenant");
 			System.exit(-1);
 		}
 
 	}
+	
+	public static String getTenantCredentials(APIEndpoint endpoint,  String clientId,
+			String clientSecret, String refreshToken) throws ClientProtocolException, IOException, URISyntaxException, DatasetLoaderException {
+			
+		if (endpoint == null) {
+			throw new DatasetLoaderException("Invalid APIEndpoint: "+endpoint);
+		}
+
+		if (clientId == null || clientId.trim().isEmpty()) {
+			throw new DatasetLoaderException("Invalid clientId: "+clientId);
+		}
+
+		if (clientSecret == null || clientSecret.trim().isEmpty()) {
+			throw new DatasetLoaderException("Invalid clientSecret: "+clientSecret);
+		}
+
+		if (refreshToken == null || refreshToken.isEmpty()) {
+			throw new DatasetLoaderException("Invalid refreshToken: "+refreshToken);
+		}
+			return DataAPIConsumer.getAccessToken(endpoint.tenantURL, endpoint.apiVersion,
+					endpoint.tenant, clientId, clientSecret, refreshToken, System.out);
+	}
+
 
 	public static void getRequiredParams(String action, PrismDataLoaderParams params) {
 		if (action == null || action.trim().isEmpty()) {
@@ -664,7 +700,7 @@ public class PrismDataLoaderMain {
 	public static String getAppversion() {
 		try {
 			Properties versionProps = new Properties();
-			versionProps.load(PrismDataLoaderMain.class.getClassLoader().getResourceAsStream("version.properties"));
+			versionProps.load(PrismDataLoaderMain.class.getClassLoader().getResourceAsStream("tablePrefix.properties"));
 			return versionProps.getProperty("workday-prism-analytics-data-loader.version");
 		} catch (Throwable t) {
 			// t.printStackTrace();

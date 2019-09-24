@@ -37,6 +37,9 @@ import com.wday.prism.dataset.file.schema.FieldType;
 public class DatasetType {
 	private String id = null;
 	private String name = null;
+	private String description = null;
+	private String displayName = null;
+	private String documentation = null;	
 	private boolean isEmpty = false;
 	private boolean isPublished = false;
 	private boolean isAPIWritable = false;
@@ -62,6 +65,30 @@ public class DatasetType {
 
 	public void setName(String name) {
 		this.name = name;
+	}
+
+	public String getDescription() {
+		return description;
+	}
+
+	public void setDescription(String description) {
+		this.description = description;
+	}
+
+	public String getDisplayName() {
+		return displayName;
+	}
+
+	public void setDisplayName(String displayName) {
+		this.displayName = displayName;
+	}
+
+	public String getDocumentation() {
+		return documentation;
+	}
+
+	public void setDocumentation(String documentation) {
+		this.documentation = documentation;
 	}
 
 	public boolean getIsEmpty() {

@@ -46,6 +46,10 @@ public class Constants {
 	public static final long MAX_UNCOMPRESSED_FILE_LENGTH = 24 * FileUtils.ONE_GB; // 24GB
 
 	public static final long MAX_COMPRESSED_FILE_LENGTH = 8 * FileUtils.ONE_GB; // 24GB
+	
+	public static final String API_VERSION_1 = "v1";
+	
+	public static final String API_VERSION_2 = "v2";
 
 	public static CodingErrorAction codingErrorAction = CodingErrorAction.REPORT;
 
@@ -57,5 +61,14 @@ public class Constants {
 	public static final String serverStatusParam = "SERVER_STATUS";
 
 	public static final int max_error_threshhold = 10000;
+	
+	public static final String logsDirName = "logs";
+	public static final String successDirName = "success";
+	public static final String errorDirName = "error";
+	public static final String dataDirName = "data";
+	public static final String configDirName = "config";
+	public static final String configFileName = "settings.json";
+	public static final String preferenceFileName = "preferences.json";
+
 
 }

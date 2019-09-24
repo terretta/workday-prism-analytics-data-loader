@@ -59,7 +59,7 @@ public class FolderUploader {
 
 	public static boolean uploadFolder(String tenantURL, String apiVersion, String tenantName, String accessToken,
 			String csvFile, String schemaFile, String uploadFormat, CodingErrorAction codingErrorAction,
-			Charset inputFileCharset, String datasetAlias, String datasetLabel, String Operation, PrintStream logger,
+			Charset inputFileCharset, String datasetAlias,  String prefix,String datasetLabel, String Operation, PrintStream logger,
 			boolean createDataset) throws DatasetLoaderException {
 
 		System.out.println("Starting FolderUploader for Folder {" + csvFile + "} ");
@@ -91,6 +91,12 @@ public class FolderUploader {
 
 						String newDataSetAlias = FileSchema.createDevName(FilenameUtils.getBaseName(file.getName()),
 								"Dataset", 1, true);
+						
+						if(prefix!=null)
+						{
+							newDataSetAlias = prefix + "_" +	newDataSetAlias;	
+						}
+
 						session = new Session(tenantName, newDataSetAlias);
 						UploadWorker worker = new UploadWorker(tenantURL, apiVersion, tenantName, accessToken,
 								file.getAbsolutePath(), schemaFile, uploadFormat, codingErrorAction, inputFileCharset,

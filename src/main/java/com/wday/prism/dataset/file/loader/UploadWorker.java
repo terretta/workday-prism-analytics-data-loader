@@ -60,6 +60,7 @@ public class UploadWorker implements Runnable {
 	private String uploadFormat = null;
 	private CodingErrorAction codingErrorAction;
 	private boolean createDataset = true;
+	private boolean parseContent = false;
 
 	private volatile AtomicBoolean uploadStatus = new AtomicBoolean(false);
 	private volatile AtomicBoolean isDone = new AtomicBoolean(false);
@@ -105,7 +106,7 @@ public class UploadWorker implements Runnable {
 				System.out.println("START Uploading file {" + this.csvFile + "} to dataset: " + datasetName);
 				status = com.wday.prism.dataset.file.loader.DatasetLoader.uploadDataset(tenantURL, apiVersion,
 						tenantName, accessToken, new File(csvFile), schemaFile, uploadFormat, codingErrorAction, inputFileCharset,
-						datasetName, datasetLabel, operation, logger, createDataset);
+						datasetName, datasetLabel, operation, logger, createDataset, parseContent);
 				if (status)
 					session.end();
 				else

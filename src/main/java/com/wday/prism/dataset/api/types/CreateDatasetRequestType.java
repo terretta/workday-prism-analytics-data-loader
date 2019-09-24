@@ -27,9 +27,46 @@
  */
 package com.wday.prism.dataset.api.types;
 
+import java.util.ArrayList;
+import java.util.List;
+
+import com.wday.prism.dataset.file.schema.FieldType;
+import com.wday.prism.dataset.file.schema.FieldTypeEnum;
+
 public class CreateDatasetRequestType {
 
 	private String name = null;
+	private String description = null;
+	private String displayName = null;
+	private String documentation = null;
+	private List<FieldType> fields;
+
+	public CreateDatasetRequestType(String name,List<FieldType> fields) {
+		this.name = name;
+		this.fields= fields;
+	}
+
+	public CreateDatasetRequestType(DatasetType dataset) {
+		this.name = dataset.getName();
+		this.description = dataset.getDescription();
+		this.displayName = dataset.getDisplayName();
+		this.documentation = dataset.getDocumentation();
+		List<FieldType> temp = new ArrayList<FieldType>(dataset.getFields().size());
+		for(FieldType fld:dataset.getFields())
+		{
+			
+			if(!fld.getName().startsWith("WPA_"))
+			{
+				if(fld.getType()==FieldTypeEnum.NUMERIC)
+				{
+					if(fld.getPrecision()==0)
+						fld.setPrecision(18); //V1 describe API return precision as 0 for INT/LONG
+				}
+				temp.add(fld);
+			}
+		}
+		this.fields = temp;
+	}
 
 	public String getName() {
 		return name;
@@ -38,5 +75,45 @@ public class CreateDatasetRequestType {
 	public void setName(String name) {
 		this.name = name;
 	}
+	
+	public String getDescription() {
+		return description;
+	}
+
+	public void setDescription(String description) {
+		this.description = description;
+	}
+
+	public String getDisplayName() {
+		return displayName;
+	}
+
+	public void setDisplayName(String displayName) {
+		this.displayName = displayName;
+	}
+
+	public String getDocumentation() {
+		return documentation;
+	}
+
+	public void setDocumentation(String documentation) {
+		this.documentation = documentation;
+	}
+
+	public List<FieldType> getFields() {
+		return fields;
+	}
+
+	public void setFields(List<FieldType> fields) {
+		this.fields = fields;
+	}
+
+//	public FileSchema getSchema() {
+//		return schema;
+//	}
+//
+//	public void setSchema(FileSchema schema) {
+//		this.schema = schema;
+//	}
 
 }

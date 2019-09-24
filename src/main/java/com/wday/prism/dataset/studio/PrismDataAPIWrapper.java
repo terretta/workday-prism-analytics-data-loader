@@ -88,7 +88,7 @@ public class PrismDataAPIWrapper {
 			}
 			if (datasetId == null && createDataset == true) {
 				datasetId = DataAPIConsumer.createDataset(endpoint.tenantURL, endpoint.apiVersion, endpoint.tenant,
-						accessToken, dataset, System.out);
+						accessToken, dataset, dataset, schema, System.out);
 			}
 			String rowId = DataAPIConsumer.createBucket(endpoint.tenantURL, endpoint.apiVersion, endpoint.tenant,
 					accessToken, dataset, datasetId, schema, "Replace", System.out);

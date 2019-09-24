@@ -56,9 +56,10 @@ public class WriterThread implements Runnable {
 	private volatile AtomicLong totalFileSize = new AtomicLong(0L);
 	Session session = null;
 	private int headerLinesToIgnore;
+	boolean parseContent;
 
 	WriterThread(BlockingQueue<List<String>> q, String uploadFilePrefix, File outputDir, List<FieldType> fields, ErrorWriter ew,
-			PrintStream logger, Session session, int headerLinesToIgnore) {
+			PrintStream logger, Session session, int headerLinesToIgnore,boolean parseContent) {
 		if (q == null || uploadFilePrefix == null || outputDir == null || ew == null || session == null) {
 			throw new IllegalArgumentException("Constructor input cannot be null");
 		}
@@ -70,6 +71,7 @@ public class WriterThread implements Runnable {
 		this.logger = logger;
 		this.session = session;
 		this.headerLinesToIgnore = headerLinesToIgnore;
+		this.parseContent = parseContent;
 	}
 
 	@Override
@@ -86,7 +88,7 @@ public class WriterThread implements Runnable {
 				try {
 					totalRowCount.getAndIncrement();
 					if (csvFormatWriter == null) {
-						csvFormatWriter = new CsvFormatWriter(outputDir, uploadFilePrefix, fields, logger, headerLinesToIgnore);
+						csvFormatWriter = new CsvFormatWriter(outputDir, uploadFilePrefix, fields, logger, headerLinesToIgnore, parseContent);
 					}
 					csvFormatWriter.addrow(row);
 				} catch (Throwable t) {

@@ -84,14 +84,16 @@ public class CsvFormatWriter {
 
 	private int filePart;
 	private int headerLinesToIgnore;
+	boolean parseContent;
 
-	public CsvFormatWriter(File outputDir, String uploadFilePrefix, List<FieldType> dataTypes, PrintStream logger,int headerLinesToIgnore) {
+	public CsvFormatWriter(File outputDir, String uploadFilePrefix, List<FieldType> dataTypes, PrintStream logger,int headerLinesToIgnore, boolean parseContent) {
 		this.outputDir = outputDir;
 		this.uploadFilePrefix = uploadFilePrefix;
 		this._dataTypes = dataTypes;
 		this.numColumns = dataTypes.size();
 		this.logger = logger;
 		this.headerLinesToIgnore = headerLinesToIgnore;
+		this.parseContent = parseContent;
 	}
 
 	public void addrow(List<String> values) throws ParseException, FileNotFoundException, IOException {
@@ -99,12 +101,7 @@ public class CsvFormatWriter {
 		LinkedHashMap<String, Object> curr = new LinkedHashMap<String, Object>();
 
 		totalRowCount.incrementAndGet();
-		if (values.size() != this.numColumns) {
-			String message = "Row " + totalRowCount + " contains an invalid number of Values, expected "
-					+ this.numColumns + " Value(s), got " + values.size() + ".";
-			throw new ParseException(message, 0);
-		}
-
+		
 		if (totalRowCount.get() % interval == 0 || totalRowCount.get() == 1) {
 			long newStartTime = System.currentTimeMillis();
 			if (startTime == 0)
@@ -117,6 +114,21 @@ public class CsvFormatWriter {
 		if (interval < 1000000 && totalRowCount.get() / interval >= 10) {
 			interval = interval * 10;
 		}
+
+		if(!parseContent)
+		{
+			initWriter();
+			writer.writeRecord(values);
+			successRowCount.incrementAndGet();
+			return;
+		}
+		
+		if (values.size() != this.numColumns) {
+			String message = "Row " + totalRowCount + " contains an invalid number of Values, expected "
+					+ this.numColumns + " Value(s), got " + values.size() + ".";
+			throw new ParseException(message, 0);
+		}
+
 
 		for (int key_value_count = 0; key_value_count < this.numColumns; key_value_count++) {
 

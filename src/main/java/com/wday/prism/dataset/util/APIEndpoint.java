@@ -61,7 +61,7 @@ public class APIEndpoint {
 		if (uri.getProtocol() != null
 				&& (uri.getProtocol().equalsIgnoreCase("https") || uri.getProtocol().equalsIgnoreCase("http"))) {
 			if (uri.getPath() == null || uri.getPath().isEmpty() || uri.getPath().equals("/")
-					|| !uri.getPath().contains("/ccx/api/v1/")) {
+					|| !(uri.getPath().contains("/ccx/api/v1/") || uri.getPath().contains("/ccx/api/v2Alpha/") || uri.getPath().contains("/ccx/api/v2/"))) {
 				throw new DatasetLoaderException("\nERROR: Invalid Workday REST API Endpoint. Endpoint must be like: "
 						+ "https://wd2-impl-services1.workday.com/ccx/api/v1/{tenantName}");
 			} else {

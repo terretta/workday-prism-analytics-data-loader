@@ -58,6 +58,8 @@ import com.wday.prism.dataset.api.DataAPIConsumer;
 import com.wday.prism.dataset.api.types.DatasetType;
 import com.wday.prism.dataset.api.types.GetBucketResponseType;
 import com.wday.prism.dataset.constants.Constants;
+import com.wday.prism.dataset.file.schema.FieldType;
+import com.wday.prism.dataset.file.schema.FieldTypeEnum;
 import com.wday.prism.dataset.file.schema.FileSchema;
 import com.wday.prism.dataset.monitor.Session;
 import com.wday.prism.dataset.monitor.ThreadContext;
@@ -70,7 +72,7 @@ import com.wday.prism.dataset.util.FileUtilsExt;
  */
 public class DatasetLoader {
 
-	private static final long maxWaitTime = 5 * 60 * 1000L;
+	private static final long maxWaitTime = 30 * 60 * 1000L;
 
 	/** The Constant nf. */
 	public static final NumberFormat nf = NumberFormat.getIntegerInstance();
@@ -101,7 +103,7 @@ public class DatasetLoader {
 	public static boolean uploadDataset(String tenantURL, String apiVersion, String tenantName, String accessToken,
 			File uploadFile, String schemaFileString, String uploadFormat, CodingErrorAction codingErrorAction,
 			Charset inputFileCharset, String datasetAlias, String datasetLabel, String operation, PrintStream logger,
-			boolean createDataset) throws DatasetLoaderException {
+			boolean createDataset, boolean parseContent) throws DatasetLoaderException {
 		File archiveDir = null;
 		File datasetArchiveDir = null;
 		File bucketDir = null;
@@ -294,20 +296,9 @@ public class DatasetLoader {
 				throw new DatasetLoaderException(
 						"datasetName {" + datasetAlias + "} should be less than 255 characters");
 
-			String datasetId = DatasetLoader.checkAPIAccess(tenantURL, apiVersion, tenantName, accessToken,
+			String datasetId = DatasetLoader.getDatasetId(tenantURL, apiVersion, tenantName, accessToken,
 					datasetAlias, logger);
 
-			if (datasetId == null && createDataset == true) {
-				datasetId = DataAPIConsumer.createDataset(tenantURL, apiVersion, tenantName, accessToken, datasetAlias,
-						logger);
-			}
-
-			// Validate access to the API before going any further
-			if (datasetId == null) {
-				logger.println("Error: you do not have access to Prism Data API. Please contact your Workday admin");
-				throw new DatasetLoaderException(
-						"Error: you do not have access to Prism Data API. Please contact your Workday admin");
-			}
 
 			if (session == null) {
 				session = Session.getCurrentSession(tenantName, datasetAlias, false);
@@ -386,6 +377,19 @@ public class DatasetLoader {
 				t.printStackTrace();
 			}
 
+			if (datasetId == null && createDataset == true) {
+				datasetId = DataAPIConsumer.createDataset(tenantURL, apiVersion, tenantName, accessToken, datasetAlias,datasetLabel,schema,
+						logger);
+			}
+
+			// Validate access to the API before going any further
+			if (datasetId == null) {
+				logger.println("Error: you do not have access to Prism Data API. Please contact your Workday admin");
+				throw new DatasetLoaderException(
+						"Error: you do not have access to Prism Data API. Please contact your Workday admin");
+			}
+
+			
 			String hdrId = createBucket(tenantURL, apiVersion, tenantName, accessToken, datasetAlias, datasetId,
 					datasetLabel, schema, operation, logger);
 
@@ -406,7 +410,7 @@ public class DatasetLoader {
 				t.printStackTrace();
 			}
 
-			readInputFile(inputFiles,uploadBaseDir,uploadFilePrefix, bucketDir, hdrId, schema, logger, inputFileCharset, session, q);
+			readInputFile(inputFiles,uploadBaseDir,uploadFilePrefix, bucketDir, hdrId, schema, logger, inputFileCharset, session, q, parseContent);
 
 			if (session.isDone()) {
 				throw new DatasetLoaderException("operation terminated on user request");
@@ -433,7 +437,7 @@ public class DatasetLoader {
 							throw new DatasetLoaderException(
 									"Bucket {" + hdrId + "} did not finish processing in time. Giving up...");
 						}
-						Thread.sleep(3000);
+						Thread.sleep(5000);
 						continue;
 					} else // status can be (New, Loading, Failed) all are invalid states at this point
 					{
@@ -515,6 +519,88 @@ public class DatasetLoader {
 		String rowId = null;
 		long startTime = System.currentTimeMillis();
 		try {
+			
+			if (datasetId != null && !apiVersion.equalsIgnoreCase("v1")) {
+//			if (datasetId != null) {
+				
+				DatasetType datasetDefinition = DataAPIConsumer.describeDataset(tenantURL, apiVersion, tenantName,
+						accessToken, datasetId, logger);
+
+				if (datasetDefinition != null && datasetDefinition.getFields() != null
+						&& !datasetDefinition.getFields().isEmpty()) {
+
+					for (FieldType field : schema.getFields()) {
+						if (field == null) {
+							continue;
+						}
+
+						for (FieldType other : datasetDefinition.getFields()) {
+							if (other == null) {
+								continue;
+							}
+							if (field.getName() == null) {
+								continue;
+							}
+
+							if (other.getName() == null) {
+								continue;
+							}
+
+							if (!field.getName().equals(other.getName())) {
+								continue;
+							}
+
+							if (field.getType() == null) {
+								if (other.getType() != null) {
+									field.setType(other.getType());
+								}
+							}
+
+							if (!field.getType().equals(other.getType())) {
+								logger.println("Field: '" + field.getName() + "' type '" + field.getType()
+										+ "'does not match Table type'" + other.getType() + "'");
+								field.setType(other.getType());
+							}
+
+							if (field.getType() == FieldTypeEnum.NUMERIC) {
+								//V1 describe return 0 precision for INT/LONG Types
+								if(other.getPrecision()!=0)
+								{
+									if (field.getPrecision() != other.getPrecision()) {
+										logger.println("Field: '" + field.getName() + "' precision '" + field.getPrecision()
+												+ "'does not match table precision'" + other.getPrecision() + "'");
+										field.setPrecision(other.getPrecision());
+									}
+								}
+
+								if (field.getScale() != other.getScale()) {
+									logger.println("Field: '" + field.getName() + "' scale '" + field.getScale()
+											+ "'does not match table scale'" + other.getScale() + "'");
+									field.setPrecision(other.getPrecision());
+								}
+
+								field.setParseFormat(null);
+							}
+
+							if (field.getType() == FieldTypeEnum.DATE) {
+								if (field.getParseFormat() == null && other.getParseFormat() != null
+										&& !other.getParseFormat().isEmpty())
+									field.setParseFormat(other.getParseFormat());
+
+								if (!field.getParseFormat().equals(other.getParseFormat())) {
+									logger.println("Field: '" + field.getName() + "' parseFormat '"
+											+ field.getParseFormat() + "'does not match table parseFormat'"
+											+ other.getParseFormat() + "'");
+									// field.setParseFormat(other.getParseFormat());
+								}
+							}
+
+						}
+
+					}
+				}
+
+			}
 
 			rowId = DataAPIConsumer.createBucket(tenantURL, apiVersion, tenantName, accessToken, datasetAlias,
 					datasetId, schema, operation, logger);
@@ -544,10 +630,9 @@ public class DatasetLoader {
 	 * @return true, if successful
 	 * @throws DatasetLoaderException
 	 */
-	private static String checkAPIAccess(String tenantURL, String apiVersion, String tenantName, String accessToken,
+	private static String getDatasetId(String tenantURL, String apiVersion, String tenantName, String accessToken,
 			String datasetAlias, PrintStream logger) throws DatasetLoaderException {
 		try {
-
 			List<DatasetType> datasetList = DataAPIConsumer.listDatasets(tenantURL, apiVersion, tenantName, accessToken,
 					null, logger);
 			if (datasetList == null || datasetList.size() == 0) {
@@ -570,7 +655,7 @@ public class DatasetLoader {
 	}
 
 	private static void readInputFile(List<File> inputFiles,File uploadBaseDir, String uploadFilePrefix, File bucketDir, String hdrId, FileSchema schema,
-			PrintStream logger, Charset inputFileCharset, Session session, BlockingQueue<List<String>> q)
+			PrintStream logger, Charset inputFileCharset, Session session, BlockingQueue<List<String>> q,boolean parseContent)
 			throws DatasetLoaderException, IOException {
 		CSVReader reader = null;
 		ErrorWriter errorWriter = null;
@@ -595,7 +680,7 @@ public class DatasetLoader {
 					session.setParam(Constants.errorCsvParam, errorWriter.getErrorFile().getAbsolutePath());
 				}
 
-				writer = new WriterThread(q, uploadFilePrefix, bucketDir, schema.getFields(), errorWriter, logger, session, schema.getParseOptions().getHeaderLinesToIgnore());
+				writer = new WriterThread(q, uploadFilePrefix, bucketDir, schema.getFields(), errorWriter, logger, session, schema.getParseOptions().getHeaderLinesToIgnore(), parseContent);
 				Thread th = new Thread(writer, "Writer-Thread");
 				th.setDaemon(true);
 				th.start();

@@ -25,31 +25,11 @@
  * NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A PARTICULAR PURPOSE.
  * =========================================================================================
  */
-package com.wday.prism.dataset;
+package com.wday.prism.dataset.api.types;
 
-import java.nio.charset.Charset;
-import java.nio.charset.CodingErrorAction;
+import java.util.List;
 
-import com.wday.prism.dataset.util.APIEndpoint;
-
-/**
- * @author puneet.gupta
- *
- */
-public class PrismDataLoaderParams {
-	String operation = null;
-	String dataset = null;
-	String datasetLabel = null;
-	String inputFile = null;
-	Charset fileEncoding = null;
-	String schemaFile = null;
-	String username = null;
-	String password = null;
-	String token = null;
-	String tablePrefix = null;
-	boolean parseContent = false;
-	APIEndpoint endpoint = null;
-	String accessToken = null;
-	boolean debug = false;
-	CodingErrorAction codingErrorAction = CodingErrorAction.REPORT;
+public class ListBucketsResponseType {
+	public long total = 0L;
+	public List<GetBucketResponseType> data = null;
 }

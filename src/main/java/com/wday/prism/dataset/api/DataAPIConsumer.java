@@ -66,6 +66,7 @@ import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpHead;
 import org.apache.http.client.methods.HttpPost;
+import org.apache.http.client.methods.HttpPut;
 import org.apache.http.entity.ContentType;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.entity.mime.MultipartEntity;
@@ -80,6 +81,7 @@ import com.wday.prism.dataset.api.types.CreateDatasetRequestType;
 import com.wday.prism.dataset.api.types.DatasetType;
 import com.wday.prism.dataset.api.types.GetBucketResponseType;
 import com.wday.prism.dataset.api.types.GetDatasetsResponseType;
+import com.wday.prism.dataset.api.types.ListBucketsResponseType;
 import com.wday.prism.dataset.constants.Constants;
 import com.wday.prism.dataset.file.loader.DatasetLoaderException;
 import com.wday.prism.dataset.file.schema.FileSchema;
@@ -268,6 +270,8 @@ public class DataAPIConsumer {
 			int statusCode = emresponse.getStatusLine().getStatusCode();
 			if (statusCode != HttpStatus.SC_OK) {
 				logger.println("Response: " + emresponse.getStatusLine().toString());
+				if(statusCode == HttpStatus.SC_FORBIDDEN) //Fix for Server sending 403 when there are no datasets
+					return datasetList;
 				throw new DatasetLoaderException("Failed to List datasets " + emresponse.getStatusLine().toString());
 			}
 
@@ -476,14 +480,35 @@ public class DataAPIConsumer {
 	}
 
 	public static String createDataset(String tenantURL, String apiVersion, String tenantName, String accessToken,
-			String datasetAlias, PrintStream logger) throws URISyntaxException, UnsupportedCharsetException,
+			String datasetAlias,String displayName, FileSchema schema, PrintStream logger) throws URISyntaxException, UnsupportedCharsetException,
+			ClientProtocolException, IOException, DatasetLoaderException {
+
+		CreateDatasetRequestType createDatasetRequestType = null;
+		if(!apiVersion.equalsIgnoreCase(Constants.API_VERSION_1))
+		{
+			createDatasetRequestType = new CreateDatasetRequestType(datasetAlias,schema.getFields());
+			createDatasetRequestType.setDisplayName(displayName);
+			schema.clearNumericParseFormat();
+			createDatasetRequestType.setFields(schema.getFields());
+		}else
+		{
+			createDatasetRequestType = new CreateDatasetRequestType(datasetAlias,null);
+		}
+		return createDataset(tenantURL, apiVersion, tenantName, accessToken, createDatasetRequestType, logger);
+	}
+
+	public static String createDataset(String tenantURL, String apiVersion, String tenantName, String accessToken,
+			CreateDatasetRequestType createDatasetRequestType, PrintStream logger) throws URISyntaxException, UnsupportedCharsetException,
 			ClientProtocolException, IOException, DatasetLoaderException {
 
 		logger.println();
 
-		CreateDatasetRequestType createDatasetRequestType = new CreateDatasetRequestType();
-		createDatasetRequestType.setName(datasetAlias);
-
+		if(!apiVersion.equalsIgnoreCase(Constants.API_VERSION_1))
+		{
+			//createDatasetRequestType.schema.clearNumericParseFormat();
+		}
+	
+		
 		ObjectMapper mapper = new ObjectMapper();
 		mapper.setSerializationInclusion(Include.NON_NULL);
 
@@ -531,6 +556,67 @@ public class DataAPIConsumer {
 			throw new DatasetLoaderException("Could not create Dataset: " + response.getStatusLine().toString());
 		}
 	}
+	
+	public static String updateDataset(String tenantURL, String apiVersion, String tenantName, String accessToken, String datasetId,
+			CreateDatasetRequestType createDatasetRequestType, PrintStream logger) throws URISyntaxException, UnsupportedCharsetException,
+			ClientProtocolException, IOException, DatasetLoaderException {
+
+		logger.println();
+
+		if(!apiVersion.equalsIgnoreCase(Constants.API_VERSION_1))
+		{
+			//createDatasetRequestType.schema.clearNumericParseFormat();
+		}
+	
+		
+		ObjectMapper mapper = new ObjectMapper();
+		mapper.setSerializationInclusion(Include.NON_NULL);
+
+		HttpClient httpClient = HttpUtils.getHttpClient();
+		// HttpUtils.getRequestConfig();
+
+		URI u = new URI(tenantURL);
+		String tokenUriString = "/ccx/api/prismAnalytics/" + apiVersion + "/" + tenantName + "/datasets/" + datasetId;
+		URI tokenURI = new URI(u.getScheme(), u.getUserInfo(), u.getHost(), u.getPort(), tokenUriString, null, null);
+		logger.println(tokenURI);
+		HttpPut tok = new HttpPut(tokenURI);
+		tok.setEntity(
+				new StringEntity(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(createDatasetRequestType),
+						ContentType.APPLICATION_JSON));
+		// tok.setConfig(requestConfig);
+
+		tok.addHeader("Authorization", "Bearer " + accessToken);
+		tok.addHeader("content-type", ContentType.APPLICATION_JSON.toString());
+
+		HttpResponse response = httpClient.execute(tok);
+		int statusCode = response.getStatusLine().getStatusCode();
+		HttpEntity responseEntity = response.getEntity();
+		InputStream is = responseEntity.getContent();
+		String responseString = IOUtils.toString(is, "UTF-8");
+		logger.println("Update Dataset Response:" + responseString);
+		is.close();
+		// httpClient.close();
+
+		if (statusCode != HttpStatus.SC_OK) {
+			logger.println("Http Response: " + response.getStatusLine().toString());
+			throw new DatasetLoaderException("Could not update Dataset: " + response.getStatusLine().toString());
+		}
+
+		if (responseString != null && !responseString.isEmpty()) {
+			mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+			DatasetType res = mapper.readValue(responseString, DatasetType.class);
+			// mapper.writerWithDefaultPrettyPrinter().writeValue(logger, res);
+			if (res != null) {
+				if (res.getId() != null) {
+					return res.getId();
+				}
+			}
+			throw new DatasetLoaderException("Could not update Dataset: " + responseString);
+		} else {
+			throw new DatasetLoaderException("Could not update Dataset: " + response.getStatusLine().toString());
+		}
+	}
+
 
 	public static boolean completeBucket(String tenantURL, String apiVersion, String tenantName, String accessToken,
 			String bucketId, PrintStream logger) throws URISyntaxException, UnsupportedCharsetException,
@@ -587,6 +673,68 @@ public class DataAPIConsumer {
 		return true;
 	}
 
+	public static List<GetBucketResponseType> listBuckets(String tenantURL, String apiVersion, String tenantName,
+			String accessToken, PrintStream logger) throws URISyntaxException,
+			UnsupportedCharsetException, ClientProtocolException, IOException, DatasetLoaderException {
+		logger.println();
+
+		List<GetBucketResponseType> bucketList = new LinkedList<GetBucketResponseType>();
+
+		ObjectMapper mapper = new ObjectMapper();
+		HttpClient httpClient = HttpUtils.getHttpClient();
+		// HttpUtils.getRequestConfig();
+
+		URI u = new URI(tenantURL);
+		String tokenUriString = "/ccx/api/prismAnalytics/" + apiVersion + "/" + tenantName+ "/wBuckets/";
+		URI tokenURI = new URI(u.getScheme(), u.getUserInfo(), u.getHost(), u.getPort(), tokenUriString, null, null);
+		logger.println("Getting Bucket: " + tokenURI);
+		HttpGet tok = new HttpGet(tokenURI);
+		// tok.setConfig(requestConfig);
+
+		tok.addHeader("Authorization", "Bearer " + accessToken);
+		tok.addHeader("content-type", ContentType.APPLICATION_JSON.toString());
+
+		HttpResponse response = httpClient.execute(tok);
+		int statusCode = response.getStatusLine().getStatusCode();
+		HttpEntity responseEntity = response.getEntity();
+		if (responseEntity == null) {
+			throw new DatasetLoaderException("Could not Get Bucket List. Error: " + response.getStatusLine().toString());
+		}
+		InputStream is = responseEntity.getContent();
+		String responseString = IOUtils.toString(is, "UTF-8");
+		// logger.println("Get Bucket Response: " + responseString);
+		is.close();
+		// httpClient.close();
+
+		if (statusCode != HttpStatus.SC_OK) {
+			if (responseString != null && !responseString.isEmpty()) {
+				throw new DatasetLoaderException("Could not Get Bucket List. Error: " + responseString);
+			} else {
+				throw new DatasetLoaderException("Could not Get Bucket List. Error: " + response.getStatusLine().toString());
+			}
+		}
+
+		if (responseString != null && !responseString.isEmpty()) {
+			mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+			ListBucketsResponseType res = mapper.readValue(responseString, ListBucketsResponseType.class);
+			if (res != null && !res.data.isEmpty()) {
+				bucketList.addAll(res.data);
+				/*
+				 * if (pageNo == 0) { datasetCount = res.total; totalPages = datasetCount / 100;
+				 * if (datasetCount % 100 > 0) totalPages = totalPages + 1; } offset = offset +
+				 * 100; pageNo++; } else { break; }
+				 */
+			} else {
+				throw new DatasetLoaderException("Failed to List Buckets: " + response.getStatusLine().toString());
+			}
+		}else
+		{
+			throw new DatasetLoaderException("Failed to List Buckets. Error: " + responseString);
+		}
+		return bucketList;
+	}
+	
+	
 	public static GetBucketResponseType getBucket(String tenantURL, String apiVersion, String tenantName,
 			String accessToken, String bucketId, PrintStream logger) throws URISyntaxException,
 			UnsupportedCharsetException, ClientProtocolException, IOException, DatasetLoaderException {
@@ -650,9 +798,11 @@ public class DataAPIConsumer {
 		HttpClient httpClient = HttpUtils.getHttpClient();
 
 		String uploadURIString = "/wday/opa/tenant/" + tenantName + "/service/wBuckets/" + bucketId + "/files";
+		/*
 		if (tenantURL.contains("suv")) {
 			uploadURIString = "/wday/opa/service/wBuckets/" + bucketId + "/files";
 		}
+		*/
 
 		URI uploadURI = new URI(u.getScheme(), u.getUserInfo(), u.getHost(), u.getPort(), uploadURIString, null, null);
 
